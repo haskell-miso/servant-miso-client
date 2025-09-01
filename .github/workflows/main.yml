@@ -22,4 +22,4 @@ jobs:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build using Nix
-        run: nix develop --command bash -c "cabal build"
+        run: nix develop --command bash -c "cabal update && cabal build"
