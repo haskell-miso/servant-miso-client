@@ -18,7 +18,6 @@ module Servant.Miso.Client
 -----------------------------------------------------------------------------
 import qualified Data.Map as M
 import           Language.Javascript.JSaddle
-import           Control.Applicative
 import           GHC.TypeLits
 import           Data.Proxy
 import           Servant.API
@@ -27,8 +26,8 @@ import           Data.Map (Map)
 -----------------------------------------------------------------------------
 import           Miso.FFI (fetch)
 import           Miso.String
--- import           Miso.Effect
 import qualified Miso.String as MS
+-- import           Miso.Effect
 -----------------------------------------------------------------------------
 class HasClient api where
   type ClientType api :: Type
@@ -38,7 +37,7 @@ toClient
   :: HasClient api
   => Proxy api
   -> ClientType api
-toClient proxy = toClientInternal proxy mempty
+toClient proxy = toClientInternal proxy emptyRequestState
 -----------------------------------------------------------------------------
 emptyRequestState :: Request
 emptyRequestState = Request mempty mempty Nothing mempty mempty mempty
@@ -52,13 +51,6 @@ data Request
   , _paths   :: [MisoString]
   , _frags   :: [MisoString]
   }
------------------------------------------------------------------------------
-instance Monoid Request where
-  mempty = emptyRequestState
------------------------------------------------------------------------------
-instance Semigroup Request where
-  Request a1 b1 c1 d1 e1 f1 <> Request a2 b2 c2 d2 e2 f2 =
-    Request (a1 <> a2) (b1 <> b2) (c1 <|> c2) (d1 <> d2) (e1 <> e2) (f1 <> f2)
 -----------------------------------------------------------------------------
 instance (KnownSymbol path, HasClient api) => HasClient (path :> api) where
   type ClientType (path :> api) = ClientType api
