@@ -1,0 +1,29 @@
+cabal-version:      3.0
+name:               servant-miso-client
+version:            0.1.0.0
+synopsis:           miso integration with servant-client
+description:        Client integration between servant and miso using the Fetch API
+homepage:           https://github.com/haskell-miso/servant-miso-client
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             dmjio
+maintainer:         code@dmj.io
+copyright:          dmjio (c) 2025
+category:           Web
+build-type:         Simple
+extra-doc-files:    CHANGELOG.md
+
+common warnings
+  ghc-options: -Wall
+
+library
+    import:
+      warnings
+    exposed-modules:
+      Servant.Miso.Client
+    build-depends:
+      base < 5, miso, servant, containers, jsaddle
+    hs-source-dirs:
+      src
+    default-language:
+      Haskell2010

@@ -1,0 +1,19 @@
+packages:
+  .
+
+allow-newer:
+  all:base
+
+source-repository-package
+  type: git
+  location: https://github.com/dmjio/miso
+  tag: d75ab7cbe3e2f8b0ea0294a57ee8dc3bdd9389ac
+
+source-repository-package
+  type: git
+  location: https://github.com/dmjio/servant
+  tag: b5974cd0c1f7dddb993c018cbb5c9ac871fc175a
+  subdir:
+    servant/
+
+flags: +template-haskell
