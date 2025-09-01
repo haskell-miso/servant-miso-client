@@ -2,7 +2,7 @@ name: Build
 
 on:
   push:
-    branches: main
+    branches: master
   pull_request:
 
 permissions:
@@ -23,8 +23,3 @@ jobs:
 
       - name: Build using Nix
         run: nix develop --command bash -c "cabal build"
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./public
