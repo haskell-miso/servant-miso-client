@@ -75,7 +75,7 @@ instance (HasClient left, HasClient right) => HasClient (left :<|> right) where
 -----------------------------------------------------------------------------
 instance (ToMisoString a, HasClient api) => HasClient (Capture name a :> api) where
   type ClientType (Capture name a :> api) = a -> ClientType api
-  toClientInternal Proxy req@Request{..} x = 
+  toClientInternal Proxy req@Request{..} x =
     toClientInternal (Proxy @api) req { _paths = _paths ++ [toMisoString x] }
 -----------------------------------------------------------------------------
 instance (ToJSVal a, HasClient api) => HasClient (ReqBody types a :> api) where
@@ -94,7 +94,7 @@ instance (KnownSymbol name, ToMisoString a, HasClient api) => HasClient (Header 
 -----------------------------------------------------------------------------
 instance (KnownSymbol name, HasClient api) => HasClient (QueryFlag name :> api) where
   type ClientType (QueryFlag name :> api) = Bool -> ClientType api
-  toClientInternal Proxy req@Request{..} hasFlag = 
+  toClientInternal Proxy req@Request{..} hasFlag =
     toClientInternal (Proxy @api) req {
       _flags = _flags ++ [ name | hasFlag ]
     } where
@@ -115,9 +115,12 @@ instance (ToMisoString a, HasClient api, KnownSymbol name) => HasClient (QueryPa
       } where
           name = ms $ symbolVal (Proxy @name)
 -----------------------------------------------------------------------------
-instance HasClient api => HasClient (Fragment a :> api) where
-  type ClientType (Fragment a :> api) = Maybe a -> ClientType api
-  toClientInternal Proxy  = undefined
+instance (ToMisoString a, HasClient api) => HasClient (Fragment a :> api) where
+  type ClientType (Fragment a :> api) = a -> ClientType api
+  toClientInternal Proxy req@Request {..} frag =
+    toClientInternal (Proxy @api) req {
+      _frags = _frags ++ [ms frag]
+    }
 -----------------------------------------------------------------------------
 instance (ReflectMethod method) => HasClient (Verb method code types a) where
   type ClientType (Verb method code types a) = JSM ()
