@@ -25,8 +25,10 @@ import           Servant.API
 import           Data.Kind
 import           Data.Map (Map)
 -----------------------------------------------------------------------------
-import           Miso.FFI ()
+import           Miso.FFI (fetch)
 import           Miso.String
+-- import           Miso.Effect
+import qualified Miso.String as MS
 -----------------------------------------------------------------------------
 class HasClient api where
   type ClientType api :: Type
@@ -119,9 +121,25 @@ instance HasClient api => HasClient (Fragment a :> api) where
 -----------------------------------------------------------------------------
 instance (ReflectMethod method) => HasClient (Verb method code types a) where
   type ClientType (Verb method code types a) = JSM ()
-  toClientInternal Proxy _ = pure ()
-    where
-      _ = ms $ show $ reflectMethod (Proxy @method)
+  toClientInternal Proxy Request {..} = do
+    body_ <-
+      case _reqBody of
+        Nothing -> pure Nothing
+        Just action -> Just <$> action
+    fetch method paths body_ (M.toList _queryParams)
+      undefined undefined (ms "")
+        where
+          paths = ms "/" <> MS.intercalate (ms "/") _paths
+          method = ms $ show $ reflectMethod (Proxy @method)
+-----------------------------------------------------------------------------
+-- Request
+-- { _headers :: Map MisoString MisoString
+-- , _queryParams :: Map MisoString MisoString
+-- , _reqBody :: Maybe (JSM JSVal)
+-- , _flags :: [MisoString]
+-- , _paths :: [MisoString]
+-- , _frags :: [MisoString]
+-- }
 -----------------------------------------------------------------------------
 -- | Not supported
 instance HasClient api => HasClient (Host sym :> api) where
