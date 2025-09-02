@@ -125,7 +125,7 @@ instance (FromJSVal a, Accept types, ReflectMethod method) => HasClient p m acti
     -> Effect p m action
   toClientInternal _ Proxy Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
-    fetch method fullPath body_ (M.toList _headers)
+    fetch fullPath method body_ (M.toList _headers)
       (successed sink) (errored sink) (ms "")
         where
           successed sink jval =
