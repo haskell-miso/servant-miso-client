@@ -125,7 +125,7 @@ instance (FromJSVal a, Accept types, ReflectMethod method) => HasClient p m acti
     -> Effect p m action
   toClientInternal _ Proxy Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
-    fetch method paths body_ (M.toList _queryParams)
+    fetch method fullPath body_ (M.toList _headers)
       (successed sink) (errored sink) (ms "")
         where
           successed sink jval =
@@ -135,7 +135,16 @@ instance (FromJSVal a, Accept types, ReflectMethod method) => HasClient p m acti
           errored sink jval =
             sink (errorful jval)
 
-          paths = ms "/" <> MS.intercalate (ms "/") _paths
+          path = ms "/" <> MS.intercalate (ms "/") _paths
+          fullPath = path <> queryParams <> queryFlags <> fragments
+             where
+               queryParams = ms "?" <>
+                 MS.intercalate (ms "&")
+                   [ k <> ms "=" <> v
+                   | (k,v) <- M.toList _queryParams
+                   ]
+               queryFlags = MS.concat [ ms "?" <> x | x <- _flags ]
+               fragments = MS.concat [ ms "#" <> x | x <- _frags ]
           method = ms $ show $ reflectMethod (Proxy @method)
 -----------------------------------------------------------------------------
 -- | Not supported
