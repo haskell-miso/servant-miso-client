@@ -11,18 +11,22 @@
 -----------------------------------------------------------------------------
 module Servant.Miso.Client
   ( HasClient (..)
+  , MimeRender (..)
+  , MimeUnrender (..)
   , toClient
   ) where
 -----------------------------------------------------------------------------
+import           Data.Aeson
 import qualified Data.Map as M
-import           Language.Javascript.JSaddle
+import           Language.Javascript.JSaddle hiding (Success)
 import           GHC.TypeLits
 import           Data.Proxy
-import           Servant.API
+import           Servant.API hiding (MimeRender(..), MimeUnrender(..))
 import           Data.Kind
 import           Data.Map (Map)
 -----------------------------------------------------------------------------
-import           Miso.FFI (fetch)
+import           Miso (Component)
+import           Miso.FFI (fetch, Blob, ArrayBuffer, File, URLSearchParams, FormData)
 import           Miso.String
 import           Miso.Effect
 import qualified Miso.String as MS
@@ -30,7 +34,7 @@ import qualified Miso.String as MS
 class HasClient (parent :: Type) (model :: Type) (action :: Type) (api :: k) where
   type ClientType parent model action api :: Type
   toClientInternal
-    :: Proxy (Effect parent model action)
+    :: Proxy (Component parent model action)
     -> Proxy api
     -> Request
     -> ClientType parent model action api
@@ -38,7 +42,7 @@ class HasClient (parent :: Type) (model :: Type) (action :: Type) (api :: k) whe
 toClient
   :: forall parent model action api
    . HasClient parent model action api
-  => Proxy (Effect parent model action)
+  => Proxy (Component parent model action)
   -> Proxy api
   -> ClientType parent model action api
 toClient effect api = toClientInternal effect api emptyRequestState
@@ -55,6 +59,58 @@ data Request
   , _paths :: [MisoString]
   , _frags :: [MisoString]
   }
+-----------------------------------------------------------------------------
+class (Accept ctyp, ToJSVal a) => MimeRender ctyp a where
+  mimeRender :: Proxy ctyp -> a -> JSM JSVal
+-----------------------------------------------------------------------------
+instance (ToJSVal a, ToJSON a) => MimeRender JSON a where
+  mimeRender Proxy = toJSVal . toJSON
+-----------------------------------------------------------------------------
+instance MimeRender OctetStream Blob where
+  mimeRender Proxy = toJSVal
+-----------------------------------------------------------------------------
+instance MimeRender OctetStream ArrayBuffer where
+  mimeRender Proxy = toJSVal
+----------------------------------------------------------------------------
+instance MimeRender OctetStream File where
+  mimeRender Proxy = toJSVal
+-----------------------------------------------------------------------------
+instance MimeRender FormUrlEncoded URLSearchParams where
+  mimeRender Proxy = toJSVal
+-----------------------------------------------------------------------------
+instance MimeRender FormUrlEncoded FormData where
+  mimeRender Proxy = toJSVal
+-----------------------------------------------------------------------------
+instance MimeRender PlainText MisoString where
+  mimeRender Proxy = toJSVal
+-----------------------------------------------------------------------------
+class Accept ctyp => MimeUnrender ctyp a where
+  mimeUnrenderType :: Proxy ctyp -> Proxy a -> MisoString
+  mimeUnrender :: Proxy ctyp -> JSVal -> JSM (Either MisoString a)
+-----------------------------------------------------------------------------
+instance MimeUnrender OctetStream File where
+  mimeUnrenderType Proxy Proxy = ms "file"
+  mimeUnrender Proxy = fmap pure . fromJSValUnchecked
+-----------------------------------------------------------------------------
+instance MimeUnrender OctetStream Blob where
+  mimeUnrenderType Proxy Proxy = ms "blob"
+  mimeUnrender Proxy = fmap pure . fromJSValUnchecked
+-----------------------------------------------------------------------------
+instance MimeUnrender OctetStream ArrayBuffer where
+  mimeUnrenderType Proxy Proxy = ms "arrayBuffer"
+  mimeUnrender Proxy = fmap pure . fromJSValUnchecked
+-----------------------------------------------------------------------------
+instance MimeUnrender PlainText MisoString where
+  mimeUnrenderType Proxy Proxy = ms "text"
+  mimeUnrender Proxy = fmap pure . fromJSValUnchecked
+-----------------------------------------------------------------------------
+instance FromJSON json => MimeUnrender JSON json where
+  mimeUnrenderType Proxy Proxy = ms "json"
+  mimeUnrender Proxy jval = do
+    value :: Value <- fromJSValUnchecked jval
+    pure $ case fromJSON @json value of
+      Success result -> Right result
+      Error message -> Left (ms message)
 -----------------------------------------------------------------------------
 instance (KnownSymbol path, HasClient p m a api) => HasClient p m a (path :> api) where
   type ClientType p m a (path :> api) = ClientType p m a api
@@ -74,10 +130,11 @@ instance (ToMisoString a, HasClient p m a api) => HasClient p m a (Capture name 
   toClientInternal p Proxy req@Request{..} x =
     toClientInternal p (Proxy @api) req { _paths = _paths ++ [toMisoString x] }
 -----------------------------------------------------------------------------
-instance (ToJSVal a, HasClient p m a api) => HasClient p m a (ReqBody types a :> api) where
-  type ClientType p m a (ReqBody types a :> api) = a -> ClientType p m a api
+instance (MimeRender t a, HasClient p m action api) => HasClient p m action (ReqBody (t ': ts) a :> api) where
+  type ClientType p m action (ReqBody (t ': ts) a :> api) = a -> ClientType p m action api
   toClientInternal p Proxy req body = toClientInternal p (Proxy @api) req {
-    _reqBody = Just (toJSVal body)
+    _reqBody = Just (mimeRender (Proxy @t) body)
+  , _headers = _headers req <> M.singleton (ms "Content-Type") (ms $ show (contentType (Proxy @t)))
   }
 -----------------------------------------------------------------------------
 instance (KnownSymbol name, ToMisoString a, HasClient p m a api) => HasClient p m a (Header name a :> api) where
@@ -118,34 +175,52 @@ instance (ToMisoString a, HasClient p m a api) => HasClient p m a (Fragment a :>
       _frags = _frags ++ [ms frag]
     }
 -----------------------------------------------------------------------------
-instance (FromJSVal a, Accept types, ReflectMethod method) => HasClient p m action (Verb method code types a) where
-  type ClientType p m action (Verb method code types a)
-     = (a -> action)
+-- | This response can be 'json', 'text', 'arrayBuffer', 'blob', or 'none'
+instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action (Verb method code (t ': ts) response) where
+  type ClientType p m action (Verb method code (t ': ts) response)
+     = (response -> action)
     -> (MisoString -> action)
     -> Effect p m action
-  toClientInternal _ Proxy Request {..} successful errorful = withSink $ \sink -> do
+  toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
-    fetch fullPath method body_ (M.toList _headers)
-      (successed sink) (errored sink) (ms "")
+    fetch (makeFullPath req) method body_ (M.toList (_headers <> acceptHeader))
+      (successed sink) (errored sink) (mimeUnrenderType (Proxy @t) (Proxy @response))
         where
-          successed sink jval =
-            sink =<< successful <$>
-              fromJSValUnchecked jval
-
-          errored sink jval =
-            sink (errorful jval)
-
-          path = ms "/" <> MS.intercalate (ms "/") _paths
-          fullPath = path <> queryParams <> queryFlags <> fragments
-             where
-               queryParams = ms "?" <>
-                 MS.intercalate (ms "&")
-                   [ k <> ms "=" <> v
-                   | (k,v) <- M.toList _queryParams
-                   ]
-               queryFlags = MS.concat [ ms "?" <> x | x <- _flags ]
-               fragments = MS.concat [ ms "#" <> x | x <- _frags ]
           method = ms $ show $ reflectMethod (Proxy @method)
+          acceptHeader = M.singleton (ms "Accept") (ms $ show (contentType (Proxy @t)))
+          errored sink jval = sink (errorful jval)
+          successed sink jval = do
+            mimeUnrender (Proxy @t) jval >>= \case
+              Left errorMessage ->
+                sink (errorful errorMessage)
+              Right result ->
+                sink (successful result)
+-----------------------------------------------------------------------------
+instance ReflectMethod method => HasClient p m action (NoContentVerb method) where
+  type ClientType p m action (NoContentVerb method)
+     = action
+    -> (MisoString -> action)
+    -> Effect p m action
+  toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
+    body_ <- sequenceA _reqBody
+    fetch (makeFullPath req) method body_ (M.toList (_headers <> acceptHeader))
+      (sink . const successful) (errored sink) (ms "none")
+        where
+          method = ms $ show $ reflectMethod (Proxy @method)
+          acceptHeader = M.singleton (ms "Accept") (ms "*")
+          errored sink jval = sink (errorful jval)
+-----------------------------------------------------------------------------
+makeFullPath :: Request -> MisoString
+makeFullPath Request {..} = path <> queryParams <> queryFlags <> fragments
+  where
+    path = ms "/" <> MS.intercalate (ms "/") _paths
+    queryParams = ms "?" <>
+      MS.intercalate (ms "&")
+        [ k <> ms "=" <> v
+        | (k,v) <- M.toList _queryParams
+        ]
+    queryFlags = MS.concat [ ms "?" <> x | x <- _flags ]
+    fragments = MS.concat [ ms "#" <> x | x <- _frags ]
 -----------------------------------------------------------------------------
 -- | Not supported
 instance HasClient p m a api => HasClient p m a (Host sym :> api) where

@@ -1,10 +1,3 @@
-🍜 servant-miso-client
-===================================
-
-This is a [servant-client](https://github.com/haskell-servant/servant) binding to [miso](https://github.com/dmjio/miso).
-
-
-```haskell
 -----------------------------------------------------------------------------
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications  #-}
@@ -72,16 +65,3 @@ downloadFile
 -----------------------------------------------------------------------------
 uploadFile :<|> downloadFile = toClient (Proxy @MyComponent) (Proxy @API)
 -----------------------------------------------------------------------------
-```
-
-### Build
-
-```bash
-cabal build
-```
-
-### Dev
-
-```bash
-cabal build
-```
