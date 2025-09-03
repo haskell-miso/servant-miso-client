@@ -1,4 +1,4 @@
-🍜 servant-client-miso
+🍜 servant-miso-client
 ===================================
 
 This is a [servant-client](https://github.com/haskell-servant/servant) binding to [miso](https://github.com/dmjio/miso).
