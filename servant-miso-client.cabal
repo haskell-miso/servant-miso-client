@@ -17,13 +17,25 @@ common warnings
   ghc-options: -Wall
 
 library
-    import:
-      warnings
-    exposed-modules:
-      Servant.Miso.Client
-    build-depends:
-      base < 5, miso, servant, containers, jsaddle
-    hs-source-dirs:
-      src
-    default-language:
-      Haskell2010
+  import:
+    warnings
+  exposed-modules:
+    Servant.Miso.Client
+  build-depends:
+    aeson, base < 5, miso, servant, containers, jsaddle, http-media
+  hs-source-dirs:
+    src
+  default-language:
+    Haskell2010
+
+executable app
+  main-is:
+    Main.hs
+  hs-source-dirs:
+    app
+  build-depends:
+    aeson, base < 5, miso, servant-miso-client, containers, jsaddle, servant
+  hs-source-dirs:
+    src
+  default-language:
+    Haskell2010
