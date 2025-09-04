@@ -27,6 +27,7 @@ import           Data.Map (Map)
 -----------------------------------------------------------------------------
 import           Miso (Component)
 import           Miso.FFI (fetch, Blob, ArrayBuffer, File, URLSearchParams, FormData)
+import qualified Miso.FFI as FFI
 import           Miso.String
 import           Miso.Effect
 import qualified Miso.String as MS
@@ -66,7 +67,7 @@ class Accept ctyp => MimeRender ctyp a where
 -----------------------------------------------------------------------------
 instance (ToJSVal a, ToJSON a) => MimeRender JSON a where
   type MimeRenderType a = JSM JSVal
-  mimeRender Proxy = toJSVal . toJSON
+  mimeRender Proxy = FFI.jsonStringify
 -----------------------------------------------------------------------------
 instance MimeRender OctetStream Blob where
   type MimeRenderType Blob = JSM JSVal
