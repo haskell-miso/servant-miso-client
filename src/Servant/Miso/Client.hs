@@ -43,13 +43,14 @@ class HasClient (parent :: Type) (model :: Type) (action :: Type) (api :: k) whe
 toClient
   :: forall parent model action api
    . HasClient parent model action api
-  => Proxy (Component parent model action)
+  => MisoString
+  -> Proxy (Component parent model action)
   -> Proxy api
   -> ClientType parent model action api
-toClient effect api = toClientInternal effect api emptyRequestState
+toClient baseUrl effect api = toClientInternal effect api emptyRequestState { _baseUrl = baseUrl }
 -----------------------------------------------------------------------------
 emptyRequestState :: Request
-emptyRequestState = Request mempty mempty Nothing mempty mempty mempty
+emptyRequestState = Request mempty mempty Nothing mempty mempty mempty (ms "")
 -----------------------------------------------------------------------------
 data Request
   = Request
@@ -59,6 +60,7 @@ data Request
   , _flags :: [MisoString]
   , _paths :: [MisoString]
   , _frags :: [MisoString]
+  , _baseUrl :: MisoString
   }
 -----------------------------------------------------------------------------
 class Accept ctyp => MimeRender ctyp a where
@@ -127,21 +129,21 @@ instance FromJSON json => MimeUnrender JSON json where
       Success result -> Right result
       Error message -> Left (ms message)
 -----------------------------------------------------------------------------
-instance (KnownSymbol path, HasClient p m a api) => HasClient p m a (path :> api) where
-  type ClientType p m a (path :> api) = ClientType p m a api
+instance (KnownSymbol path, HasClient p m action api) => HasClient p m action (path :> api) where
+  type ClientType p m action (path :> api) = ClientType p m action api
   toClientInternal p Proxy req@Request{..} =
     toClientInternal p (Proxy @api) req { _paths = _paths ++ [path] }
       where
         path = ms $ symbolVal (Proxy @path)
 -----------------------------------------------------------------------------
-instance (HasClient p m a left, HasClient p m a right) => HasClient p m a (left :<|> right) where
-  type ClientType p m a (left :<|> right) = ClientType p m a left :<|> ClientType p m a right
+instance (HasClient p m action left, HasClient p m action right) => HasClient p m action (left :<|> right) where
+  type ClientType p m action (left :<|> right) = ClientType p m action left :<|> ClientType p m action right
   toClientInternal p Proxy req =
     toClientInternal p (Proxy @left) req :<|>
       toClientInternal p (Proxy @right) req
 -----------------------------------------------------------------------------
-instance (ToMisoString a, HasClient p m a api) => HasClient p m a (Capture name a :> api) where
-  type ClientType p m a (Capture name a :> api) = a -> ClientType p m a api
+instance (ToMisoString a, HasClient p m action api) => HasClient p m action (Capture name a :> api) where
+  type ClientType p m action (Capture name a :> api) = a -> ClientType p m action api
   toClientInternal p Proxy req@Request{..} x =
     toClientInternal p (Proxy @api) req { _paths = _paths ++ [toMisoString x] }
 -----------------------------------------------------------------------------
@@ -152,16 +154,16 @@ instance (MimeRender t a, HasClient p m action api) => HasClient p m action (Req
   , _headers = _headers req <> M.singleton (ms "Content-Type") (ms $ show (contentType (Proxy @t)))
   }
 -----------------------------------------------------------------------------
-instance (KnownSymbol name, ToMisoString a, HasClient p m a api) => HasClient p m a (Header name a :> api) where
-  type ClientType p m a (Header name a :> api) = a -> ClientType p m a api
+instance (KnownSymbol name, ToMisoString a, HasClient p m action api) => HasClient p m action (Header name a :> api) where
+  type ClientType p m action (Header name a :> api) = a -> ClientType p m action api
   toClientInternal p Proxy request@Request{..} x =
     toClientInternal p (Proxy @api) request
       { _headers = M.insert name (toMisoString x) _headers
       } where
           name = ms $ symbolVal (Proxy @name)
 -----------------------------------------------------------------------------
-instance (KnownSymbol name, HasClient p m a api) => HasClient p m a (QueryFlag name :> api) where
-  type ClientType p m a (QueryFlag name :> api) = Bool -> ClientType p m a api
+instance (KnownSymbol name, HasClient p m action api) => HasClient p m action (QueryFlag name :> api) where
+  type ClientType p m action (QueryFlag name :> api) = Bool -> ClientType p m action api
   toClientInternal p _ req@Request{..} hasFlag =
     toClientInternal p (Proxy @api) req {
       _flags = _flags ++ [ name | hasFlag ]
@@ -172,8 +174,8 @@ instance HasClient p m a EmptyAPI where
   type ClientType p m a EmptyAPI = Effect p m a
   toClientInternal _ Proxy _ = pure ()
 -----------------------------------------------------------------------------
-instance (ToMisoString a, HasClient p m a api, KnownSymbol name) => HasClient p m a (QueryParam name a :> api) where
-  type ClientType p m a (QueryParam name a :> api) = Maybe a -> ClientType p m a api
+instance (ToMisoString a, HasClient p m action api, KnownSymbol name) => HasClient p m action (QueryParam name a :> api) where
+  type ClientType p m action (QueryParam name a :> api) = Maybe a -> ClientType p m action api
   toClientInternal p Proxy request = \case
     Nothing ->
       toClientInternal p (Proxy @api) request
@@ -183,8 +185,8 @@ instance (ToMisoString a, HasClient p m a api, KnownSymbol name) => HasClient p 
       } where
           name = ms $ symbolVal (Proxy @name)
 -----------------------------------------------------------------------------
-instance (ToMisoString a, HasClient p m a api) => HasClient p m a (Fragment a :> api) where
-  type ClientType p m a (Fragment a :> api) = a -> ClientType p m a api
+instance (ToMisoString a, HasClient p m action api) => HasClient p m action (Fragment a :> api) where
+  type ClientType p m action (Fragment a :> api) = a -> ClientType p m action api
   toClientInternal p Proxy req@Request {..} frag =
     toClientInternal p (Proxy @api) req {
       _frags = _frags ++ [ms frag]
@@ -201,7 +203,7 @@ instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action
     fetch (makeFullPath req) method body_ (M.toList (_headers <> acceptHeader))
       (successed sink) (errored sink) (mimeUnrenderType (Proxy @t) (Proxy @response))
         where
-          method = ms $ show $ reflectMethod (Proxy @method)
+          method = ms $ reflectMethod (Proxy @method)
           acceptHeader = M.singleton (ms "Accept") (ms $ show (contentType (Proxy @t)))
           errored sink jval = sink (errorful jval)
           successed sink jval = do
@@ -221,19 +223,26 @@ instance ReflectMethod method => HasClient p m action (NoContentVerb method) whe
     fetch (makeFullPath req) method body_ (M.toList (_headers <> acceptHeader))
       (sink . const successful) (errored sink) (ms "none")
         where
-          method = ms $ show $ reflectMethod (Proxy @method)
-          acceptHeader = M.singleton (ms "Accept") (ms "*")
+          method = ms $ reflectMethod (Proxy @method)
+          acceptHeader = M.singleton (ms "Accept") (ms "*/*")
           errored sink jval = sink (errorful jval)
 -----------------------------------------------------------------------------
 makeFullPath :: Request -> MisoString
 makeFullPath Request {..} = path <> queryParams <> queryFlags <> fragments
   where
-    path = ms "/" <> MS.intercalate (ms "/") _paths
-    queryParams = ms "?" <>
-      MS.intercalate (ms "&")
+    basedUrl
+      | _baseUrl == ms "/" = _baseUrl
+      | MS.null _baseUrl = ms "/" -- dmj: relative url
+      | otherwise = _baseUrl <> ms "/"
+    path = basedUrl <> MS.intercalate (ms "/") _paths
+    queryParams = MS.concat
+      [ ms "?" <>
+        MS.intercalate (ms "&")
         [ k <> ms "=" <> v
         | (k,v) <- M.toList _queryParams
         ]
+      | M.size _queryParams > 0
+      ]
     queryFlags = MS.concat [ ms "?" <> x | x <- _flags ]
     fragments = MS.concat [ ms "#" <> x | x <- _frags ]
 -----------------------------------------------------------------------------
@@ -263,7 +272,7 @@ instance HasClient p m a api => HasClient p m a (RemoteHost :> api) where
   toClientInternal p Proxy req = toClientInternal p (Proxy @api) req
 -----------------------------------------------------------------------------
 -- | Not supported yet
-instance HasClient p m a api => HasClient p m a (CaptureAll sym a :> api) where
-  type ClientType p m a (CaptureAll sym a :> api) = ClientType p m a api
+instance HasClient p m action api => HasClient p m action (CaptureAll sym a :> api) where
+  type ClientType p m action (CaptureAll sym a :> api) = ClientType p m action api
   toClientInternal p Proxy req = toClientInternal p (Proxy @api) req
 -----------------------------------------------------------------------------

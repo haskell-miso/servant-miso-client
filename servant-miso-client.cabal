@@ -33,8 +33,10 @@ executable app
     Main.hs
   hs-source-dirs:
     app
+  other-modules:
+    Servant.Miso.Client
   build-depends:
-    aeson, base < 5, miso, servant-miso-client, containers, jsaddle, servant
+    aeson, base < 5, miso, containers, jsaddle, servant
   hs-source-dirs:
     src
   default-language:

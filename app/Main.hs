@@ -7,6 +7,7 @@
 -----------------------------------------------------------------------------
 module Main where
 -----------------------------------------------------------------------------
+import Data.Aeson
 import Miso
 import Miso.Html.Element as H
 import Miso.Html.Event as H
@@ -17,6 +18,8 @@ import Servant.API
 -----------------------------------------------------------------------------
 main :: IO ()
 main = run $ startComponent myComponent
+  { initialAction = Just Start
+  }
 -----------------------------------------------------------------------------
 type MyComponent = App () Action
 -----------------------------------------------------------------------------
@@ -26,18 +29,21 @@ myComponent = component () update_ $ \() ->
   [ button_ [ onClick Download ] [ "download" ]
   ] where
       update_ = \case
-        Download ->
-          downloadFile Downloaded DownloadError
+        Download -> do
+          io_ (consoleLog "clicked")
+          downloadGithub Downloaded DownloadError
         DownloadError err -> io_ $ do
           consoleError err
-        Downloaded (File file) -> io_ $ do
-          consoleLog "got file"
-          consoleLog' file
+        Downloaded value -> io_ $ do
+          consoleLog $ ms $ show value
+        Start -> io_ $ do
+          consoleLog "starting..."
 -----------------------------------------------------------------------------
 data Action
-  = Downloaded File
+  = Downloaded Value
   | DownloadError MisoString
   | Download
+  | Start
 -----------------------------------------------------------------------------
 type API = UploadFile :<|> DownloadFile
 -----------------------------------------------------------------------------
@@ -45,7 +51,7 @@ type UploadFile
   = "api" :> "upload" :> "file1" :> ReqBody '[OctetStream] File :> PostNoContent
 -----------------------------------------------------------------------------
 type DownloadFile
-  = "api" :> "download" :> "file1" :> Get '[OctetStream] File
+  = "api" :> "download" :> "file1" :> QueryParam "foo" MisoString :> Get '[OctetStream] File
 -----------------------------------------------------------------------------
 uploadFile
   :: File
@@ -57,11 +63,17 @@ uploadFile
   -> Transition () Action
 -----------------------------------------------------------------------------
 downloadFile
-  :: (File -> Action)
+  :: Maybe MisoString
+  -> (File -> Action)
   -- ^ Received file
   -> (MisoString -> Action)
   -- ^ Error message
   -> Transition () Action
 -----------------------------------------------------------------------------
-uploadFile :<|> downloadFile = toClient (Proxy @MyComponent) (Proxy @API)
+uploadFile :<|> downloadFile = toClient mempty (Proxy @MyComponent) (Proxy @API)
+-----------------------------------------------------------------------------
+type GitHubAPI = Get '[JSON] Value
+-----------------------------------------------------------------------------
+downloadGithub :: (Value -> Action) -> (MisoString -> Action) -> Effect ROOT () Action
+downloadGithub = toClient "https://api.github.com" (Proxy @MyComponent) (Proxy @GitHubAPI)
 -----------------------------------------------------------------------------
