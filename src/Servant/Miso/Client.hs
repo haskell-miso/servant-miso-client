@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE DataKinds             #-}
 {-# LANGUAGE PolyKinds             #-}
 -----------------------------------------------------------------------------
 module Servant.Miso.Client
