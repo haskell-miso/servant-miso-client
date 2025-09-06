@@ -26,7 +26,7 @@ import           Data.Kind
 import           Data.Map (Map)
 -----------------------------------------------------------------------------
 import           Miso (Component)
-import           Miso.FFI (fetch, Blob, ArrayBuffer, File, URLSearchParams, FormData)
+import           Miso.FFI (fetch, Blob, ArrayBuffer, File, URLSearchParams, FormData, Response(..))
 import qualified Miso.FFI as FFI
 import           Miso.String
 import           Miso.Effect
@@ -195,8 +195,8 @@ instance (ToMisoString a, HasClient p m action api) => HasClient p m action (Fra
 -- | This response can be 'json', 'text', 'arrayBuffer', 'blob', or 'none'
 instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action (Verb method code (t ': ts) response) where
   type ClientType p m action (Verb method code (t ': ts) response)
-     = (response -> action)
-    -> (MisoString -> action)
+     = (Response response -> action)
+    -> (Response JSVal -> action)
     -> Effect p m action
   toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
@@ -205,23 +205,23 @@ instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action
         where
           method = ms $ reflectMethod (Proxy @method)
           acceptHeader = M.singleton (ms "Accept") (ms $ show (contentType (Proxy @t)))
-          errored sink jval = sink (errorful jval)
-          successed sink jval = do
-            mimeUnrender (Proxy @t) jval >>= \case
-              Left errorMessage ->
-                sink (errorful errorMessage)
+          errored sink = sink . errorful
+          successed sink resp@Response {..} = do
+            mimeUnrender (Proxy @t) body >>= \case
+              Left errorMessage_ ->
+                sink $ errorful $ resp { errorMessage = Just errorMessage_ }
               Right result ->
-                sink (successful result)
+                sink $ successful $ resp { body = result }
 -----------------------------------------------------------------------------
 instance ReflectMethod method => HasClient p m action (NoContentVerb method) where
   type ClientType p m action (NoContentVerb method)
-     = action
-    -> (MisoString -> action)
+     = (Response () -> action)
+    -> (Response JSVal -> action)
     -> Effect p m action
   toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
     fetch (makeFullPath req) method body_ (M.toList (_headers <> acceptHeader))
-      (sink . const successful) (errored sink) (ms "none")
+      (sink . successful) (errored sink) (ms "none")
         where
           method = ms $ reflectMethod (Proxy @method)
           acceptHeader = M.singleton (ms "Accept") (ms "*/*")
