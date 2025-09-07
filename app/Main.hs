@@ -1,6 +1,7 @@
 -----------------------------------------------------------------------------
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE LambdaCase        #-}
@@ -32,16 +33,16 @@ myComponent = component () update_ $ \() ->
         Download -> do
           io_ (consoleLog "clicked")
           downloadGithub Downloaded DownloadError
-        DownloadError err -> io_ $ do
-          consoleError err
-        Downloaded value -> io_ $ do
-          consoleLog $ ms $ show value
+        DownloadError Response {..} -> io_ $ do
+          consoleError $ ms (show errorMessage)
+        Downloaded Response {..} -> io_ $ do
+          consoleLog $ ms $ show body
         Start -> io_ $ do
           consoleLog "starting..."
 -----------------------------------------------------------------------------
 data Action
-  = Downloaded Value
-  | DownloadError MisoString
+  = Downloaded (Response Value)
+  | DownloadError (Response JSVal)
   | Download
   | Start
 -----------------------------------------------------------------------------
@@ -56,17 +57,17 @@ type DownloadFile
 uploadFile
   :: File
   -- ^ File to upload
-  -> Action
+  -> (Response () -> Action)
   -- ^ Successful callback (expecting no response)
-  -> (MisoString -> Action)
+  -> (Response JSVal -> Action)
   -- ^ Errorful callback, with error message as param
   -> Transition () Action
 -----------------------------------------------------------------------------
 downloadFile
   :: Maybe MisoString
-  -> (File -> Action)
+  -> (Response File -> Action)
   -- ^ Received file
-  -> (MisoString -> Action)
+  -> (Response JSVal -> Action)
   -- ^ Error message
   -> Transition () Action
 -----------------------------------------------------------------------------
@@ -74,6 +75,6 @@ uploadFile :<|> downloadFile = toClient mempty (Proxy @MyComponent) (Proxy @API)
 -----------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
-downloadGithub :: (Value -> Action) -> (MisoString -> Action) -> Effect ROOT () Action
+downloadGithub :: (Response Value -> Action) -> (Response JSVal -> Action) -> Effect ROOT () Action
 downloadGithub = toClient "https://api.github.com" (Proxy @MyComponent) (Proxy @GitHubAPI)
 -----------------------------------------------------------------------------
