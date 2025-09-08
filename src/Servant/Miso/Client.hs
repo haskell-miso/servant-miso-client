@@ -197,7 +197,7 @@ instance (ToMisoString a, HasClient p m action api) => HasClient p m action (Fra
 instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action (Verb method code (t ': ts) response) where
   type ClientType p m action (Verb method code (t ': ts) response)
      = (Response response -> action)
-    -> (Response JSVal -> action)
+    -> (Response MisoString -> action)
     -> Effect p m action
   toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
@@ -209,15 +209,16 @@ instance (MimeUnrender t response, ReflectMethod method) => HasClient p m action
           errored sink = sink . errorful
           successed sink resp@Response {..} = do
             mimeUnrender (Proxy @t) body >>= \case
-              Left errorMessage_ ->
-                sink $ errorful $ resp { errorMessage = Just errorMessage_ }
+              Left errorMessage_ -> do
+                body_ <- fromJSValUnchecked body
+                sink $ errorful resp { errorMessage = Just errorMessage_, body = body_ }
               Right result ->
                 sink $ successful $ resp { body = result }
 -----------------------------------------------------------------------------
 instance ReflectMethod method => HasClient p m action (NoContentVerb method) where
   type ClientType p m action (NoContentVerb method)
      = (Response () -> action)
-    -> (Response JSVal -> action)
+    -> (Response MisoString -> action)
     -> Effect p m action
   toClientInternal _ Proxy req@Request {..} successful errorful = withSink $ \sink -> do
     body_ <- sequenceA _reqBody
