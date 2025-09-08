@@ -42,7 +42,7 @@ myComponent = component () update_ $ \() ->
 -----------------------------------------------------------------------------
 data Action
   = Downloaded (Response Value)
-  | DownloadError (Response JSVal)
+  | DownloadError (Response MisoString)
   | Download
   | Start
 -----------------------------------------------------------------------------
@@ -59,7 +59,7 @@ uploadFile
   -- ^ File to upload
   -> (Response () -> Action)
   -- ^ Successful callback (expecting no response)
-  -> (Response JSVal -> Action)
+  -> (Response MisoString -> Action)
   -- ^ Errorful callback, with error message as param
   -> Transition () Action
 -----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ downloadFile
   :: Maybe MisoString
   -> (Response File -> Action)
   -- ^ Received file
-  -> (Response JSVal -> Action)
+  -> (Response MisoString -> Action)
   -- ^ Error message
   -> Transition () Action
 -----------------------------------------------------------------------------
@@ -75,6 +75,6 @@ uploadFile :<|> downloadFile = toClient mempty (Proxy @MyComponent) (Proxy @API)
 -----------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
-downloadGithub :: (Response Value -> Action) -> (Response JSVal -> Action) -> Effect ROOT () Action
+downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
 downloadGithub = toClient "https://api.github.com" (Proxy @MyComponent) (Proxy @GitHubAPI)
 -----------------------------------------------------------------------------
