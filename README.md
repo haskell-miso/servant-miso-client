@@ -8,6 +8,7 @@ This is a [servant-client](https://github.com/haskell-servant/servant) binding t
 -----------------------------------------------------------------------------
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications  #-}
+{-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE LambdaCase        #-}
@@ -18,12 +19,15 @@ import Miso
 import Miso.Html.Element as H
 import Miso.Html.Event as H
 -----------------------------------------------------------------------------
+import Data.Aeson
 import Data.Proxy
 import Servant.Miso.Client
 import Servant.API
 -----------------------------------------------------------------------------
 main :: IO ()
 main = run $ startComponent myComponent
+  { initialAction = Just Start
+  }
 -----------------------------------------------------------------------------
 type MyComponent = App () Action
 -----------------------------------------------------------------------------
@@ -33,18 +37,21 @@ myComponent = component () update_ $ \() ->
   [ button_ [ onClick Download ] [ "download" ]
   ] where
       update_ = \case
-        Download ->
-          downloadFile Downloaded DownloadError
-        DownloadError err -> io_ $ do
-          consoleError err
-        Downloaded (File file) -> io_ $ do
-          consoleLog "got file"
-          consoleLog' file
+        Download -> do
+          io_ (consoleLog "clicked")
+          downloadGithub Downloaded DownloadError
+        DownloadError Response {..} -> io_ $ do
+          consoleError $ ms (show errorMessage)
+        Downloaded Response {..} -> io_ $ do
+          consoleLog $ ms $ show body
+        Start -> io_ $ do
+          consoleLog "starting..."
 -----------------------------------------------------------------------------
 data Action
-  = Downloaded File
-  | DownloadError MisoString
+  = Downloaded (Response Value)
+  | DownloadError (Response MisoString)
   | Download
+  | Start
 -----------------------------------------------------------------------------
 type API = UploadFile :<|> DownloadFile
 -----------------------------------------------------------------------------
@@ -52,25 +59,31 @@ type UploadFile
   = "api" :> "upload" :> "file1" :> ReqBody '[OctetStream] File :> PostNoContent
 -----------------------------------------------------------------------------
 type DownloadFile
-  = "api" :> "download" :> "file1" :> Get '[OctetStream] File
+  = "api" :> "download" :> "file1" :> QueryParam "foo" MisoString :> Get '[OctetStream] File
 -----------------------------------------------------------------------------
 uploadFile
   :: File
   -- ^ File to upload
-  -> Action
+  -> (Response () -> Action)
   -- ^ Successful callback (expecting no response)
-  -> (MisoString -> Action)
+  -> (Response MisoString -> Action)
   -- ^ Errorful callback, with error message as param
   -> Transition () Action
 -----------------------------------------------------------------------------
 downloadFile
-  :: (File -> Action)
+  :: Maybe MisoString
+  -> (Response File -> Action)
   -- ^ Received file
-  -> (MisoString -> Action)
+  -> (Response MisoString -> Action)
   -- ^ Error message
   -> Transition () Action
 -----------------------------------------------------------------------------
-uploadFile :<|> downloadFile = toClient (Proxy @MyComponent) (Proxy @API)
+uploadFile :<|> downloadFile = toClient mempty (Proxy @MyComponent) (Proxy @API)
+-----------------------------------------------------------------------------
+type GitHubAPI = Get '[JSON] Value
+-----------------------------------------------------------------------------
+downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
+downloadGithub = toClient "https://api.github.com" (Proxy @MyComponent) (Proxy @GitHubAPI)
 -----------------------------------------------------------------------------
 ```
 
