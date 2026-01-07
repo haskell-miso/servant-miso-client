@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               servant-miso-client
-version:            0.1.0.0
+version:            0.2.0.0
 synopsis:           miso integration with servant-client
 description:        Client integration between servant and miso using the Fetch API
 homepage:           https://github.com/haskell-miso/servant-miso-client
@@ -22,7 +22,7 @@ library
   exposed-modules:
     Servant.Miso.Client
   build-depends:
-    aeson, base < 5, miso, servant, containers, jsaddle, http-media
+    base < 5, miso, servant, containers, http-media
   hs-source-dirs:
     src
   default-language:
@@ -36,7 +36,7 @@ executable app
   other-modules:
     Servant.Miso.Client
   build-depends:
-    aeson, base < 5, miso, containers, jsaddle, servant
+    base < 5, miso, containers, servant
   hs-source-dirs:
     src
   default-language:
