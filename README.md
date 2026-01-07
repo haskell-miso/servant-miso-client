@@ -16,10 +16,10 @@ This is a [servant-client](https://github.com/haskell-servant/servant) binding t
 module Main where
 -----------------------------------------------------------------------------
 import Miso
+import Miso.JSON
 import Miso.Html.Element as H
 import Miso.Html.Event as H
 -----------------------------------------------------------------------------
-import Data.Aeson
 import Data.Proxy
 import Servant.Miso.Client
 import Servant.API
@@ -64,26 +64,27 @@ type DownloadFile
 uploadFile
   :: File
   -- ^ File to upload
-  -> (Response () -> Action)
+  -> (Response () -> IO ())
   -- ^ Successful callback (expecting no response)
-  -> (Response MisoString -> Action)
+  -> (Response MisoString -> IO ())
   -- ^ Errorful callback, with error message as param
-  -> Transition () Action
+  -> IO ()
 -----------------------------------------------------------------------------
 downloadFile
   :: Maybe MisoString
-  -> (Response File -> Action)
+  -> (Response File -> IO ())
   -- ^ Received file
-  -> (Response MisoString -> Action)
+  -> (Response MisoString -> IO ())
   -- ^ Error message
-  -> Transition () Action
+  -> IO ()
 -----------------------------------------------------------------------------
-uploadFile :<|> downloadFile = toClient mempty (Proxy @MyComponent) (Proxy @API)
+uploadFile :<|> downloadFile = toClient mempty (Proxy @API)
 -----------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
 downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
-downloadGithub = toClient "https://api.github.com" (Proxy @MyComponent) (Proxy @GitHubAPI)
+downloadGithub successsful errorful = withSink $ \sink ->
+  toClient "https://api.github.com" (Proxy @GitHubAPI) (sink . successsful) (sink . errorful)
 -----------------------------------------------------------------------------
 ```
 
