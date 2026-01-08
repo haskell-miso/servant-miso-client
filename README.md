@@ -53,33 +53,6 @@ data Action
   | Download
   | Start
 -----------------------------------------------------------------------------
-type API = UploadFile :<|> DownloadFile
------------------------------------------------------------------------------
-type UploadFile
-  = "api" :> "upload" :> "file1" :> ReqBody '[OctetStream] File :> PostNoContent
------------------------------------------------------------------------------
-type DownloadFile
-  = "api" :> "download" :> "file1" :> QueryParam "foo" MisoString :> Get '[OctetStream] File
------------------------------------------------------------------------------
-uploadFile
-  :: File
-  -- ^ File to upload
-  -> (Response () -> IO ())
-  -- ^ Successful callback (expecting no response)
-  -> (Response MisoString -> IO ())
-  -- ^ Errorful callback, with error message as param
-  -> IO ()
------------------------------------------------------------------------------
-downloadFile
-  :: Maybe MisoString
-  -> (Response File -> IO ())
-  -- ^ Received file
-  -> (Response MisoString -> IO ())
-  -- ^ Error message
-  -> IO ()
------------------------------------------------------------------------------
-uploadFile :<|> downloadFile = toClient mempty (Proxy @API)
------------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
 downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
