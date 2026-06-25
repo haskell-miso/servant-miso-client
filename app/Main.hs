@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeOperators     #-}
 {-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE LambdaCase        #-}
+{-# LANGUAGE CPP               #-}
 -----------------------------------------------------------------------------
 module Main where
 -----------------------------------------------------------------------------
@@ -25,10 +26,22 @@ main = startApp defaultEvents myComponent
 type MyComponent = App () Action
 -----------------------------------------------------------------------------
 myComponent :: MyComponent
-myComponent = component () update_ $ \() ->
-  H.div_ []
-  [ button_ [ onClick Download ] [ "download" ]
-  ] where
+myComponent = component () update_ view_
+  where
+#if MIN_VERSION_miso(1,13,0)
+      view_ :: () -> () -> () -> View () () Action
+      view_ _ _ _ =
+#elif MIN_VERSION_miso(1,11,0)
+      view_ :: () -> () -> View () Action
+      view_ _ _ =
+#else
+      view_  :: () -> View () Action
+      view_ _ =
+#endif
+        H.div_ []
+        [ button_ [ onClick Download ] [ "download" ]
+        ]
+      
       update_ = \case
         Download -> do
           io_ (consoleLog "clicked")
@@ -75,7 +88,13 @@ uploadFile :<|> downloadFile = toClient mempty (Proxy @API)
 -----------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
+#if MIN_VERSION_miso(1,13,0)
+downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect () props () Action
+#elif MIN_VERSION_miso(1,11,0)
+downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () () Action
+#else
 downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
+#endif
 downloadGithub successsful errorful = withSink $ \sink ->
   toClient "https://api.github.com" (Proxy @GitHubAPI) (sink . successsful) (sink . errorful)
 -----------------------------------------------------------------------------
