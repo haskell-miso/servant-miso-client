@@ -29,7 +29,7 @@ myComponent :: MyComponent
 myComponent = component () update_ view_
   where
 #if MIN_VERSION_miso(1,13,0)
-      view_ :: () -> () -> () -> View () () Action
+      view_ :: () -> () -> () -> View () Action
       view_ _ _ _ =
 #elif MIN_VERSION_miso(1,11,0)
       view_ :: () -> () -> View () Action
