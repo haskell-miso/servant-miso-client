@@ -15,6 +15,7 @@ module Servant.Miso.Client
   , MimeRender (..)
   , MimeUnrender (..)
   , toClient
+  , Response (..)
   ) where
 -----------------------------------------------------------------------------
 import           Miso.JSON
