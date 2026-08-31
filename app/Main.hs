@@ -75,7 +75,7 @@ uploadFile :<|> downloadFile = toClient mempty (Proxy @API)
 -----------------------------------------------------------------------------
 type GitHubAPI = Get '[JSON] Value
 -----------------------------------------------------------------------------
-downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect ROOT () Action
+downloadGithub :: (Response Value -> Action) -> (Response MisoString -> Action) -> Effect context props () Action
 downloadGithub successsful errorful = withSink $ \sink ->
   toClient "https://api.github.com" (Proxy @GitHubAPI) (sink . successsful) (sink . errorful)
 -----------------------------------------------------------------------------
