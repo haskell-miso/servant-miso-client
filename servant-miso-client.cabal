@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               servant-miso-client
-version:            0.2.0.0
+version:            0.2.1.0
 synopsis:           miso integration with servant-client
 description:        Client integration between servant and miso using the Fetch API
 homepage:           https://github.com/haskell-miso/servant-miso-client
