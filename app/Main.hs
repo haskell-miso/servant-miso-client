@@ -26,7 +26,7 @@ main = startApp defaultEvents myComponent
 type MyComponent = App () Action
 -----------------------------------------------------------------------------
 myComponent :: MyComponent
-myComponent = component () update_ $ \_ _ () ->
+myComponent = component () update_ $ \() ->
   H.div_ []
   [ button_ [ onClick Download ] [ "download" ]
   ] where
